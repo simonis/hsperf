@@ -6,12 +6,13 @@ Unlike other similar utilities, it does **not** rely on access to `/tmp/hsperfda
 ### Usage
 
 ```
-hsperf <pid> [<counter>...]
+hsperf <pid> [-i <ms>] [<counter>...]
 ```
 
 If only `<pid>` is specified, the program prints all counters with their names.  
 If a space separated list of counter names is given, the program prints values
-of the specified counters, one value per line.
+of the specified counters, one value per line. If `-i <ms>` is given, the counters
+will be queried and printed all `<ms>` milliseconds.
 
 ### How it works
 

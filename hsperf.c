@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -237,10 +238,8 @@ static int read_vmstructs(VMSymbols* vmsym, char** perfmem) {
     }
 }
 
-static PerfData* read_perf_data(char* perfmem, size_t size) {
-    PerfData* result = malloc(size);
+static PerfData* read_perf_data(char* perfmem, PerfData* result, size_t size) {
     if (result != NULL && vm_read(perfmem, result, size) <= 0) {
-        free(result);
         return NULL;
     }
     return result;
@@ -278,7 +277,7 @@ static void print_counter(PerfData* perfdata, const char* name) {
 
 int main(int argc, char** argv) {
     if (argc < 2 || (pid = atoi(argv[1])) <= 0) {
-        return error("Usage: hsperf <pid> [<counter>...]");
+        return error("Usage: hsperf <pid> [-i <ms>] [<counter>...]");
     }
 
     char jvm_path[PATH_MAX];
@@ -297,7 +296,12 @@ int main(int argc, char** argv) {
         return error("Failed to read VMStructs");
     }
 
-    PerfData* perfdata = read_perf_data(perfmem[0], perfmem[1] - perfmem[0]);
+    PerfData* result = malloc(perfmem[1] - perfmem[0]);
+    if (result == NULL) {
+        return error("Could not allocate memory");
+    }
+
+    PerfData* perfdata = read_perf_data(perfmem[0], result, perfmem[1] - perfmem[0]);
     if (perfdata == NULL) {
         return error("Failed to read PerfData");
     }
@@ -305,8 +309,29 @@ int main(int argc, char** argv) {
     if (argc == 2) {
         print_all_counters(perfdata);
     } else {
-        while (--argc > 1) {
-            print_counter(perfdata, (++argv)[1]);
+        if (argc >= 4 && !strcmp("-i", argv[2])) {
+            int ms = atoi(argv[3]);
+            struct timespec ts;
+            ts.tv_sec = ms / 1000;
+            ts.tv_nsec = (ms % 1000) * 1000000;
+            while (1) {
+                if (perfdata == NULL) break;
+                int counters = argc - 4;
+                if (counters > 0) {
+                    while (counters > 0) {
+                        print_counter(perfdata, argv[argc - counters]);
+                        --counters;
+                    }
+                } else {
+                    print_all_counters(perfdata);
+                }
+                nanosleep(&ts, NULL);
+                perfdata = read_perf_data(perfmem[0], result, perfmem[1] - perfmem[0]);
+            }
+        } else {
+            while (--argc > 1) {
+                print_counter(perfdata, (++argv)[1]);
+            }
         }
     }
 
